@@ -1,0 +1,8 @@
+Ad name,Ad delivery,Ad set name,Amount spent (USD),Impressions,Results,Result type,Cost per result,Purchase ROAS (return on ad spend),Frequency,Link (ad settings),Preview link,Body (ad settings),Headline
+Summer Promo - Video,Active,Summer Campaign 2024,2500.50,180000,125,Purchases,20.00,4.25,2.3,https://example.com/summer,https://facebook.com/preview/123,Shop our amazing summer collection now!,Summer Sale - 50% Off
+Product Demo Ad,Active,Product Launch Q1,1800.00,95000,75,Purchases,24.00,3.80,1.8,https://example.com/product,,Experience the future of technology,New Product Launch
+Retargeting - Cart,Active,Retargeting Warm Leads,950.25,45000,52,Purchases,18.27,5.10,3.2,https://example.com/cart,https://facebook.com/preview/456,Complete your purchase today,Don't forget your items!
+Brand Video,Paused,Brand Awareness,3200.00,250000,85,Purchases,37.65,2.10,1.4,,,Building trust since 1990,Our Story
+Holiday Special,Completed,Holiday 2024,4100.00,320000,195,Purchases,21.03,4.85,2.1,https://example.com/holiday,https://facebook.com/preview/789,"Limited time offer, don't miss out!",Holiday Deals
+Lookalike Test,Active,Prospecting LAL 1%,890.00,62000,38,Purchases,23.42,3.20,1.6,https://example.com/shop,,"Join thousands of happy customers",You'll Love This
+App Install Campaign,Active,Mobile App Installs,2100.00,185000,45,App installs,46.67,1.20,1.2,https://example.com/app,https://facebook.com/preview/999,Download now for exclusive deals,Get Our App
