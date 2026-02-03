@@ -109,32 +109,32 @@ export default function AdsTable({
                     )}
                   </div>
                 </td>
-                <td className="px-4 py-3 text-sm text-gray-700 text-right font-mono">
+                <td className="px-4 py-3 text-sm text-gray-700 text-right tabular-nums">
                   {formatInteger(ad.impressions)}
                 </td>
-                <td className="px-4 py-3 text-sm text-gray-700 text-right font-mono">
+                <td className="px-4 py-3 text-sm text-gray-700 text-right tabular-nums">
                   {formatCurrency(ad.spend)}
                 </td>
-                <td className="px-4 py-3 text-sm text-gray-700 text-right font-mono">
+                <td className="px-4 py-3 text-sm text-gray-700 text-right tabular-nums">
                   {formatInteger(ad.purchases)}
                 </td>
-                <td className="px-4 py-3 text-sm text-gray-700 text-right font-mono">
+                <td className="px-4 py-3 text-sm text-gray-700 text-right tabular-nums">
                   {formatCurrency(ad.cpa)}
                 </td>
-                <td className="px-4 py-3 text-sm text-gray-700 text-right font-mono">
+                <td className="px-4 py-3 text-sm text-right tabular-nums">
                   <span
                     className={
                       ad.roas !== null && ad.roas >= 3
-                        ? 'text-green-600 font-medium'
+                        ? 'text-green-600 font-semibold'
                         : ad.roas !== null && ad.roas < 1
-                        ? 'text-red-600'
-                        : ''
+                        ? 'text-red-500'
+                        : 'text-gray-700'
                     }
                   >
                     {formatROAS(ad.roas)}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-sm text-gray-700 text-right font-mono">
+                <td className="px-4 py-3 text-sm text-gray-700 text-right tabular-nums">
                   {formatDecimal(ad.frequency)}
                 </td>
                 <td className="px-4 py-3 text-sm text-gray-700">
