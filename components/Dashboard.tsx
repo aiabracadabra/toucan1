@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import TopBar from '@/components/TopBar';
 import AdsTable from '@/components/AdsTable';
@@ -35,6 +35,20 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [debugInfo, setDebugInfo] = useState<ParseDebugInfo | null>(null);
   const [showDebug, setShowDebug] = useState(false);
+  const debugRef = useRef<HTMLDivElement>(null);
+
+  // Close debug popover when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (debugRef.current && !debugRef.current.contains(event.target as Node)) {
+        setShowDebug(false);
+      }
+    }
+    if (showDebug) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showDebug]);
 
   // Sync URL query param to state on mount and when URL changes
   useEffect(() => {
@@ -90,11 +104,7 @@ export default function Dashboard() {
           unmappedColumns: parseResult.unmappedColumns,
           warnings: parseResult.warnings,
         });
-
-        // Auto-show debug if there are warnings
-        if (parseResult.warnings.length > 0) {
-          setShowDebug(true);
-        }
+        // Don't auto-show debug anymore
       } else {
         const parseError = result as ParseError;
         setError(parseError.error);
@@ -103,7 +113,6 @@ export default function Dashboard() {
           detectedColumns: parseError.detectedColumns,
           suggestions: parseError.suggestions,
         });
-        setShowDebug(true); // Always show debug on error
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to parse file');
@@ -218,6 +227,8 @@ export default function Dashboard() {
     exportToCSV(processedData, `meta-ads-export-${new Date().toISOString().split('T')[0]}.csv`);
   }, [processedData]);
 
+  const hasWarnings = debugInfo?.warnings && debugInfo.warnings.length > 0;
+
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
       {/* Header */}
@@ -281,133 +292,115 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Debug Panel */}
-        {debugInfo && !isLoading && (
-          <div className="mx-4 mt-4">
-            <button
-              onClick={() => setShowDebug(!showDebug)}
-              className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900"
-            >
-              <svg
-                className={`w-4 h-4 transition-transform ${showDebug ? 'rotate-90' : ''}`}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 5l7 7-7 7"
-                />
-              </svg>
-              {showDebug ? 'Hide' : 'Show'} parsing details
-            </button>
-
-            {showDebug && (
-              <div className="mt-3 p-4 bg-gray-100 border border-gray-200 rounded-lg text-sm">
-                {/* Warnings */}
-                {debugInfo.warnings && debugInfo.warnings.length > 0 && (
-                  <div className="mb-4">
-                    <h4 className="font-medium text-amber-700 mb-2 flex items-center gap-2">
-                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                        <path
-                          fillRule="evenodd"
-                          d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
-                          clipRule="evenodd"
-                        />
-                      </svg>
-                      Warnings
-                    </h4>
-                    <ul className="list-disc list-inside text-amber-800 space-y-1">
-                      {debugInfo.warnings.map((warning, i) => (
-                        <li key={i}>{warning}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {/* Mapped Columns */}
-                {debugInfo.mappedColumns && Object.keys(debugInfo.mappedColumns).length > 0 && (
-                  <div className="mb-4">
-                    <h4 className="font-medium text-green-700 mb-2 flex items-center gap-2">
-                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                        <path
-                          fillRule="evenodd"
-                          d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                          clipRule="evenodd"
-                        />
-                      </svg>
-                      Mapped Columns ({Object.keys(debugInfo.mappedColumns).length})
-                    </h4>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                      {Object.entries(debugInfo.mappedColumns).map(([field, column]) => (
-                        <div key={field} className="bg-green-50 px-2 py-1 rounded text-xs">
-                          <span className="font-mono text-green-800">{field}</span>
-                          <span className="text-green-600"> ← </span>
-                          <span className="text-green-700">{column}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Unmapped Columns */}
-                {debugInfo.unmappedColumns && debugInfo.unmappedColumns.length > 0 && (
-                  <div className="mb-4">
-                    <h4 className="font-medium text-gray-600 mb-2">
-                      Unmapped Columns ({debugInfo.unmappedColumns.length})
-                    </h4>
-                    <div className="flex flex-wrap gap-1">
-                      {debugInfo.unmappedColumns.map((col) => (
-                        <span
-                          key={col}
-                          className="bg-gray-200 px-2 py-0.5 rounded text-xs text-gray-700"
-                        >
-                          {col}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* All Detected Columns (for errors) */}
-                {error && debugInfo.detectedColumns.length > 0 && (
-                  <div>
-                    <h4 className="font-medium text-gray-600 mb-2">
-                      Detected Columns ({debugInfo.detectedColumns.length})
-                    </h4>
-                    <div className="flex flex-wrap gap-1">
-                      {debugInfo.detectedColumns.map((col) => (
-                        <span
-                          key={col}
-                          className="bg-gray-200 px-2 py-0.5 rounded text-xs text-gray-700"
-                        >
-                          {col}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {debugInfo.detectedColumns.length === 0 && (
-                  <p className="text-gray-500 italic">No columns detected in the file.</p>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Stats bar */}
+        {/* Stats bar with info icon */}
         {!isLoading && rawData.length > 0 && (
-          <div className="bg-white border-b border-gray-200 px-4 py-2 mt-4">
-            <p className="text-sm text-gray-500">
-              Showing <span className="font-medium text-gray-900">{processedData.length}</span> of{' '}
-              <span className="font-medium text-gray-900">{rawData.length}</span> ads
-              {filters.search || filters.activeOnly || filters.minSpend !== null
-                ? ' (filtered)'
-                : ''}
-            </p>
+          <div className="bg-white border-b border-gray-200 px-4 py-2">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-gray-500">
+                Showing <span className="font-medium text-gray-900">{processedData.length}</span> of{' '}
+                <span className="font-medium text-gray-900">{rawData.length}</span> ads
+                {filters.search || filters.activeOnly || filters.minSpend !== null
+                  ? ' (filtered)'
+                  : ''}
+              </p>
+
+              {/* Info icon for parsing details */}
+              {debugInfo && (
+                <div className="relative" ref={debugRef}>
+                  <button
+                    onClick={() => setShowDebug(!showDebug)}
+                    className={`p-1.5 rounded-full transition-colors ${
+                      showDebug
+                        ? 'bg-gray-200 text-gray-700'
+                        : hasWarnings
+                        ? 'text-amber-500 hover:bg-amber-50'
+                        : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'
+                    }`}
+                    title="Parsing details"
+                  >
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                      <path
+                        fillRule="evenodd"
+                        d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                  </button>
+
+                  {/* Debug popover */}
+                  {showDebug && (
+                    <div className="absolute right-0 top-full mt-2 w-80 sm:w-96 bg-white border border-gray-200 rounded-lg shadow-lg z-20 p-4 text-sm">
+                      <h4 className="font-medium text-gray-900 mb-3">Parsing Details</h4>
+
+                      {/* Warnings */}
+                      {hasWarnings && (
+                        <div className="mb-3">
+                          <div className="flex items-center gap-1.5 text-amber-700 mb-1.5">
+                            <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                              <path
+                                fillRule="evenodd"
+                                d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                                clipRule="evenodd"
+                              />
+                            </svg>
+                            <span className="text-xs font-medium">Warnings</span>
+                          </div>
+                          <ul className="text-xs text-amber-800 space-y-0.5 pl-5">
+                            {debugInfo.warnings?.map((warning, i) => (
+                              <li key={i}>{warning}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* Mapped Columns */}
+                      {debugInfo.mappedColumns && Object.keys(debugInfo.mappedColumns).length > 0 && (
+                        <div className="mb-3">
+                          <div className="text-xs font-medium text-gray-600 mb-1.5">
+                            Mapped ({Object.keys(debugInfo.mappedColumns).length})
+                          </div>
+                          <div className="flex flex-wrap gap-1">
+                            {Object.entries(debugInfo.mappedColumns).map(([field, column]) => (
+                              <span
+                                key={field}
+                                className="bg-green-50 text-green-700 px-1.5 py-0.5 rounded text-xs"
+                                title={`${field} ← ${column}`}
+                              >
+                                {field}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Unmapped Columns */}
+                      {debugInfo.unmappedColumns && debugInfo.unmappedColumns.length > 0 && (
+                        <div>
+                          <div className="text-xs font-medium text-gray-600 mb-1.5">
+                            Unmapped ({debugInfo.unmappedColumns.length})
+                          </div>
+                          <div className="flex flex-wrap gap-1">
+                            {debugInfo.unmappedColumns.slice(0, 8).map((col) => (
+                              <span
+                                key={col}
+                                className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded text-xs"
+                              >
+                                {col}
+                              </span>
+                            ))}
+                            {debugInfo.unmappedColumns.length > 8 && (
+                              <span className="text-xs text-gray-400">
+                                +{debugInfo.unmappedColumns.length - 8} more
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         )}
 

@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import { AdData } from '@/types';
 import {
   formatCurrency,
@@ -22,6 +23,22 @@ export default function AdsTable({
   onRowClick,
   selectedIndex,
 }: AdsTableProps) {
+  // Detect which columns have data
+  const visibleColumns = useMemo(() => {
+    const hasData = (key: keyof AdData) => data.some((ad) => ad[key] !== null);
+
+    return {
+      impressions: hasData('impressions'),
+      spend: hasData('spend'),
+      purchases: hasData('purchases'),
+      cpa: hasData('cpa'),
+      roas: hasData('roas'),
+      frequency: hasData('frequency'),
+      adSet: hasData('adSet'),
+      status: hasData('status'),
+    };
+  }, [data]);
+
   if (data.length === 0) {
     return (
       <div className="flex items-center justify-center h-64 text-gray-500">
@@ -48,36 +65,52 @@ export default function AdsTable({
 
   return (
     <div className="overflow-auto flex-1">
-      <table className="w-full border-collapse min-w-[1000px]">
+      <table className="w-full border-collapse">
         <thead className="sticky top-0 z-10">
           <tr className="bg-gray-50 border-b border-gray-200">
-            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[200px]">
               Ad Name
             </th>
-            <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">
-              Impressions
-            </th>
-            <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">
-              Spend ($)
-            </th>
-            <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">
-              Purchases
-            </th>
-            <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">
-              CPA ($)
-            </th>
-            <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">
-              ROAS
-            </th>
-            <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">
-              Frequency
-            </th>
-            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-              Ad Set
-            </th>
-            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-              Status
-            </th>
+            {visibleColumns.impressions && (
+              <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider w-[100px]">
+                Impr.
+              </th>
+            )}
+            {visibleColumns.spend && (
+              <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider w-[90px]">
+                Spend
+              </th>
+            )}
+            {visibleColumns.purchases && (
+              <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider w-[80px]">
+                Purch.
+              </th>
+            )}
+            {visibleColumns.cpa && (
+              <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider w-[80px]">
+                CPA
+              </th>
+            )}
+            {visibleColumns.roas && (
+              <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider w-[80px]">
+                ROAS
+              </th>
+            )}
+            {visibleColumns.frequency && (
+              <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider w-[70px]">
+                Freq.
+              </th>
+            )}
+            {visibleColumns.adSet && (
+              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[140px]">
+                Ad Set
+              </th>
+            )}
+            {visibleColumns.status && (
+              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-[90px]">
+                Status
+              </th>
+            )}
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
@@ -89,62 +122,74 @@ export default function AdsTable({
               <tr
                 key={index}
                 onClick={() => onRowClick(ad, index)}
-                className={`cursor-pointer transition-colors ${
-                  isSelected
-                    ? 'bg-blue-50'
-                    : isTopPerformer
-                    ? 'bg-green-50 hover:bg-green-100'
-                    : 'hover:bg-gray-50'
+                className={`cursor-pointer bg-white hover:bg-gray-100 transition-colors duration-200 ${
+                  isSelected ? '!bg-gray-100' : ''
                 }`}
               >
                 <td className="px-4 py-3 text-sm text-gray-900">
                   <div className="flex items-center gap-2">
-                    <span className="truncate max-w-[200px]" title={formatString(ad.adName)}>
+                    <span className="truncate max-w-[280px]" title={formatString(ad.adName)}>
                       {formatString(ad.adName)}
                     </span>
                     {isTopPerformer && (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800 flex-shrink-0">
                         Top
                       </span>
                     )}
                   </div>
                 </td>
-                <td className="px-4 py-3 text-sm text-gray-700 text-right tabular-nums">
-                  {formatInteger(ad.impressions)}
-                </td>
-                <td className="px-4 py-3 text-sm text-gray-700 text-right tabular-nums">
-                  {formatCurrency(ad.spend)}
-                </td>
-                <td className="px-4 py-3 text-sm text-gray-700 text-right tabular-nums">
-                  {formatInteger(ad.purchases)}
-                </td>
-                <td className="px-4 py-3 text-sm text-gray-700 text-right tabular-nums">
-                  {formatCurrency(ad.cpa)}
-                </td>
-                <td className="px-4 py-3 text-sm text-right tabular-nums">
-                  <span
-                    className={
-                      ad.roas !== null && ad.roas >= 3
-                        ? 'text-green-600 font-semibold'
-                        : ad.roas !== null && ad.roas < 1
-                        ? 'text-red-500'
-                        : 'text-gray-700'
-                    }
-                  >
-                    {formatROAS(ad.roas)}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-sm text-gray-700 text-right tabular-nums">
-                  {formatDecimal(ad.frequency)}
-                </td>
-                <td className="px-4 py-3 text-sm text-gray-700">
-                  <span className="truncate max-w-[150px] block" title={formatString(ad.adSet)}>
-                    {formatString(ad.adSet)}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-sm">
-                  <StatusBadge status={ad.status} />
-                </td>
+                {visibleColumns.impressions && (
+                  <td className="px-4 py-3 text-sm text-gray-700 text-right tabular-nums">
+                    {formatInteger(ad.impressions)}
+                  </td>
+                )}
+                {visibleColumns.spend && (
+                  <td className="px-4 py-3 text-sm text-gray-700 text-right tabular-nums">
+                    {formatCurrency(ad.spend)}
+                  </td>
+                )}
+                {visibleColumns.purchases && (
+                  <td className="px-4 py-3 text-sm text-gray-700 text-right tabular-nums">
+                    {formatInteger(ad.purchases)}
+                  </td>
+                )}
+                {visibleColumns.cpa && (
+                  <td className="px-4 py-3 text-sm text-gray-700 text-right tabular-nums">
+                    {formatCurrency(ad.cpa)}
+                  </td>
+                )}
+                {visibleColumns.roas && (
+                  <td className="px-4 py-3 text-sm text-right tabular-nums">
+                    <span
+                      className={
+                        ad.roas !== null && ad.roas >= 3
+                          ? 'text-green-600 font-semibold'
+                          : ad.roas !== null && ad.roas < 1
+                          ? 'text-red-500'
+                          : 'text-gray-700'
+                      }
+                    >
+                      {formatROAS(ad.roas)}
+                    </span>
+                  </td>
+                )}
+                {visibleColumns.frequency && (
+                  <td className="px-4 py-3 text-sm text-gray-700 text-right tabular-nums">
+                    {formatDecimal(ad.frequency)}
+                  </td>
+                )}
+                {visibleColumns.adSet && (
+                  <td className="px-4 py-3 text-sm text-gray-700">
+                    <span className="truncate max-w-[160px] block" title={formatString(ad.adSet)}>
+                      {formatString(ad.adSet)}
+                    </span>
+                  </td>
+                )}
+                {visibleColumns.status && (
+                  <td className="px-4 py-3 text-sm">
+                    <StatusBadge status={ad.status} />
+                  </td>
+                )}
               </tr>
             );
           })}
