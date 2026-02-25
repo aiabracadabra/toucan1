@@ -1,13 +1,30 @@
+// Asset from Notion
+export interface NotionAsset {
+  name: string;
+  url: string;
+  kind: 'file' | 'external';
+}
+
+// Notion assets response for a single ad
+export interface NotionAdAssets {
+  adId: string;
+  assets: NotionAsset[];
+}
+
 export interface AdData {
+  // Identifier for joining with Notion
+  adId: string | null;
+
   // Core fields (displayed in table)
   adName: string | null;
+  adSet: string | null;
+  campaignName: string | null;
   impressions: number | null;
   spend: number | null;
   purchases: number | null;
   cpa: number | null;
   roas: number | null;
   frequency: number | null;
-  adSet: string | null;
   status: string | null;
 
   // Creative fields (shown in drawer, hidden in table)
@@ -16,6 +33,9 @@ export interface AdData {
   destinationLink: string | null;
   previewLink: string | null;
   imageHash: string | null;
+
+  // Assets from Notion (joined by adId)
+  assets: NotionAsset[];
 
   // Store original row for debugging
   raw: Record<string, unknown>;
@@ -43,6 +63,7 @@ export interface ParseResult {
   mappedColumns: Record<string, string>;
   unmappedColumns: string[];
   warnings: string[];
+  hasAdId: boolean; // Whether Ad ID column was found
 }
 
 export interface ParseError {

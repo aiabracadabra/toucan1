@@ -78,6 +78,82 @@ Summer Sale Ad 1,150000,2500.00,125,20.00,3.50,2.5,Summer Campaign,Active
 Winter Promo,85000,1200.00,60,20.00,2.80,1.8,Winter Campaign,Paused
 ```
 
+## Notion Integration (Creative Assets)
+
+The app can fetch creative assets (images) from a Notion database and display them alongside your ad data. This requires:
+
+1. Your Meta export includes an **Ad ID** column
+2. A Notion database with matching Ad IDs and uploaded images
+
+### Setting Up Notion Integration
+
+#### 1. Create a Notion Integration
+
+1. Go to [https://www.notion.so/my-integrations](https://www.notion.so/my-integrations)
+2. Click **+ New integration**
+3. Name it (e.g., "Meta Ads Dashboard")
+4. Select the workspace where your database lives
+5. Click **Submit**
+6. Copy the **Internal Integration Token** (starts with `secret_...`)
+
+#### 2. Set Up Your Notion Database
+
+Your Notion database should have:
+
+| Property Name | Property Type | Description |
+|---------------|---------------|-------------|
+| `Ad ID` | Text | The Meta Ad ID (must match exactly) |
+| `Assets` | Files & media | Upload your creative images here |
+
+You can also use these alternative property names:
+- Ad ID: `Ad Id`, `ad id`, `AdID`, `adId`
+- Assets: `assets`, `Creative`, `creative`, `Images`, `images`
+
+#### 3. Share Database with Integration
+
+1. Open your Notion database
+2. Click **...** (three dots menu) in the top right
+3. Go to **Connections** > **Add connections**
+4. Search for and select your integration
+5. Copy the **Database ID** from the URL:
+   - URL format: `https://www.notion.so/yourworkspace/DATABASE_ID?v=...`
+   - The Database ID is the 32-character string before the `?`
+
+#### 4. Configure Environment Variables
+
+For **local development**, create a `.env.local` file:
+
+```bash
+NOTION_TOKEN=secret_your_integration_token_here
+NOTION_DATABASE_ID=your_database_id_here
+```
+
+For **Vercel deployment**:
+
+1. Go to your Vercel project dashboard
+2. Navigate to **Settings** > **Environment Variables**
+3. Add both variables:
+   - `NOTION_TOKEN` = your integration token
+   - `NOTION_DATABASE_ID` = your database ID
+4. Redeploy for changes to take effect
+
+### How It Works
+
+1. Upload a Meta CSV/XLSX that includes an **Ad ID** column
+2. The app automatically fetches assets from Notion via `/api/notion/assets`
+3. Assets are matched to ads by Ad ID (string comparison, trimmed)
+4. In the details drawer, you'll see:
+   - Main creative image preview
+   - Thumbnail navigation for multiple assets
+   - "No creative uploaded yet" if no match found
+
+### Troubleshooting
+
+- **"NOTION_TOKEN environment variable is not set"**: Add the token to `.env.local` or Vercel settings
+- **"Failed to fetch assets"**: Ensure the integration has access to the database
+- **Assets not showing**: Verify Ad IDs match exactly (check for extra spaces)
+- **"No Ad ID column found"**: Your CSV needs an "Ad ID" column for joining
+
 ## Tech Stack
 
 - **Framework**: Next.js 14 (App Router)
@@ -85,6 +161,7 @@ Winter Promo,85000,1200.00,60,20.00,2.80,1.8,Winter Campaign,Paused
 - **Styling**: Tailwind CSS
 - **CSV Parsing**: PapaParse
 - **XLSX Parsing**: SheetJS (xlsx)
+- **Notion API**: Server-side integration for creative assets
 
 ## License
 

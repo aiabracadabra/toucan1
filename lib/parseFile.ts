@@ -6,11 +6,17 @@ import { AdData, ParseOutcome } from '@/types';
 // COLUMN MAPPING CONFIGURATION
 // ============================================================================
 
-type SchemaField = keyof Omit<AdData, 'raw'>;
+type SchemaField = keyof Omit<AdData, 'raw' | 'assets'>;
 
 // Each schema field maps to an array of possible column name variations
 // Order matters: first match wins
 const COLUMN_MAPPINGS: Record<SchemaField, string[]> = {
+  adId: [
+    'ad id',
+    'adid',
+    'ad_id',
+    'id',
+  ],
   adName: [
     'ad name',
     'adname',
@@ -29,6 +35,11 @@ const COLUMN_MAPPINGS: Record<SchemaField, string[]> = {
     'ad set',
     'adset',
     'ad_set',
+  ],
+  campaignName: [
+    'campaign name',
+    'campaign_name',
+    'campaign',
   ],
   spend: [
     'amount spent (usd)',
@@ -115,8 +126,10 @@ const RESULT_TYPE_COLUMN_NAMES = ['result type', 'result indicator', 'result_typ
 
 // Fields that should be parsed as strings
 const STRING_FIELDS: SchemaField[] = [
+  'adId',
   'adName',
   'adSet',
+  'campaignName',
   'status',
   'headline',
   'body',
@@ -328,20 +341,23 @@ export function mapRowToSchema(
   }
 
   const ad: AdData = {
+    adId: parseString(getValue('adId')),
     adName: parseString(getValue('adName')),
+    adSet: parseString(getValue('adSet')),
+    campaignName: parseString(getValue('campaignName')),
     impressions: parseNumber(getValue('impressions')),
     spend: parseNumber(getValue('spend')),
     purchases,
     cpa: parseNumber(getValue('cpa')),
     roas: parseNumber(getValue('roas')),
     frequency: parseNumber(getValue('frequency')),
-    adSet: parseString(getValue('adSet')),
     status: parseString(getValue('status')),
     headline: parseString(getValue('headline')),
     body: parseString(getValue('body')),
     destinationLink: parseString(getValue('destinationLink')),
     previewLink: parseString(getValue('previewLink')),
     imageHash: parseString(getValue('imageHash')),
+    assets: [], // Will be populated after Notion fetch
     raw: { ...row },
   };
 
@@ -596,6 +612,7 @@ function processData(
     mappedColumns: detection.mappedColumns,
     unmappedColumns: detection.unmappedColumns,
     warnings,
+    hasAdId: !!detection.mappedColumns['adId'],
   };
 }
 

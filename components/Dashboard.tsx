@@ -7,13 +7,14 @@ import AdsTable from '@/components/AdsTable';
 import DetailsDrawer from '@/components/DetailsDrawer';
 import { parseFile } from '@/lib/parseFile';
 import { exportToCSV } from '@/lib/exportCSV';
-import { AdData, Filters, SortOption, ParseResult, ParseError } from '@/types';
+import { normalizeMetaInsights, MetaInsightRow } from '@/lib/normalizeMetaInsights';
+import { AdData, Filters, SortOption, ParseResult, ParseError, NotionAdAssets } from '@/types';
 
 const defaultFilters: Filters = {
   search: '',
   activeOnly: false,
   minSpend: null,
-  sortBy: 'roas_desc',
+  sortBy: 'purchases_desc',
 };
 
 interface ParseDebugInfo {
@@ -22,6 +23,10 @@ interface ParseDebugInfo {
   unmappedColumns?: string[];
   warnings?: string[];
   suggestions?: string[];
+  hasAdId?: boolean;
+  notionStatus?: 'loading' | 'success' | 'error' | 'no-adid';
+  notionError?: string;
+  assetsLoaded?: number;
 }
 
 export default function Dashboard() {
@@ -32,6 +37,8 @@ export default function Dashboard() {
   const [filters, setFilters] = useState<Filters>(defaultFilters);
   const [selectedAdIndex, setSelectedAdIndex] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncDateRange, setSyncDateRange] = useState('last_30d');
   const [error, setError] = useState<string | null>(null);
   const [debugInfo, setDebugInfo] = useState<ParseDebugInfo | null>(null);
   const [showDebug, setShowDebug] = useState(false);
@@ -96,15 +103,79 @@ export default function Dashboard() {
 
       if (result.success) {
         const parseResult = result as ParseResult;
-        setRawData(parseResult.data);
-        setFilters(defaultFilters);
-        setDebugInfo({
+        let adsData = parseResult.data;
+
+        const initialDebugInfo: ParseDebugInfo = {
           detectedColumns: parseResult.detectedColumns,
           mappedColumns: parseResult.mappedColumns,
           unmappedColumns: parseResult.unmappedColumns,
           warnings: parseResult.warnings,
-        });
-        // Don't auto-show debug anymore
+          hasAdId: parseResult.hasAdId,
+        };
+
+        // If Ad ID column exists, try to fetch Notion assets
+        if (parseResult.hasAdId) {
+          initialDebugInfo.notionStatus = 'loading';
+          setDebugInfo(initialDebugInfo);
+          setRawData(adsData);
+          setFilters(defaultFilters);
+
+          try {
+            const notionResponse = await fetch('/api/notion/assets');
+
+            if (notionResponse.ok) {
+              const notionAssets: NotionAdAssets[] = await notionResponse.json();
+
+              // Build a map for quick lookup
+              const assetMap = new Map<string, NotionAdAssets['assets']>();
+              for (const item of notionAssets) {
+                const normalizedId = item.adId.trim();
+                assetMap.set(normalizedId, item.assets);
+              }
+
+              // Merge assets into ads data
+              let assetsLoaded = 0;
+              adsData = adsData.map((ad) => {
+                if (ad.adId) {
+                  const assets = assetMap.get(ad.adId.trim());
+                  if (assets && assets.length > 0) {
+                    assetsLoaded++;
+                    return { ...ad, assets };
+                  }
+                }
+                return ad;
+              });
+
+              setRawData(adsData);
+              setDebugInfo({
+                ...initialDebugInfo,
+                notionStatus: 'success',
+                assetsLoaded,
+              });
+            } else {
+              const errorData = await notionResponse.json().catch(() => ({}));
+              setDebugInfo({
+                ...initialDebugInfo,
+                notionStatus: 'error',
+                notionError: errorData.error || 'Failed to fetch Notion assets',
+              });
+            }
+          } catch (notionErr) {
+            setDebugInfo({
+              ...initialDebugInfo,
+              notionStatus: 'error',
+              notionError: notionErr instanceof Error ? notionErr.message : 'Failed to connect to Notion',
+            });
+          }
+        } else {
+          // No Ad ID column
+          setRawData(adsData);
+          setFilters(defaultFilters);
+          setDebugInfo({
+            ...initialDebugInfo,
+            notionStatus: 'no-adid',
+          });
+        }
       } else {
         const parseError = result as ParseError;
         setError(parseError.error);
@@ -211,7 +282,7 @@ export default function Dashboard() {
   }, [selectedAdIndex, processedData]);
 
   const handleRowClick = useCallback(
-    (ad: AdData, index: number) => {
+    (_ad: AdData, index: number) => {
       setSelectedAdIndex(index);
       updateUrlWithAdIndex(index);
     },
@@ -226,6 +297,37 @@ export default function Dashboard() {
   const handleExport = useCallback(() => {
     exportToCSV(processedData, `meta-ads-export-${new Date().toISOString().split('T')[0]}.csv`);
   }, [processedData]);
+
+  const handleMetaSync = useCallback(async () => {
+    setIsSyncing(true);
+    setError(null);
+
+    try {
+      const res = await fetch(`/api/meta/insights?preset=${syncDateRange}`);
+      const json = await res.json();
+
+      if (!res.ok) {
+        const msg = json?.meta_error?.message ?? json?.error ?? 'Meta API error';
+        setError(`Sync failed: ${msg}`);
+        return;
+      }
+
+      const rows: MetaInsightRow[] = json.data ?? [];
+      if (rows.length === 0) {
+        setError('Sync returned no data for this date range.');
+        return;
+      }
+
+      setRawData(normalizeMetaInsights(rows));
+      setFilters(defaultFilters);
+      setSelectedAdIndex(null);
+      setDebugInfo(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to sync from Meta');
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [syncDateRange]);
 
   const hasWarnings = debugInfo?.warnings && debugInfo.warnings.length > 0;
 
@@ -244,6 +346,10 @@ export default function Dashboard() {
         filters={filters}
         onFiltersChange={setFilters}
         onFileUpload={handleFileUpload}
+        onMetaSync={handleMetaSync}
+        isSyncing={isSyncing}
+        syncDateRange={syncDateRange}
+        onSyncDateRangeChange={setSyncDateRange}
         onReset={handleReset}
         onExport={handleExport}
         hasData={processedData.length > 0}
@@ -375,7 +481,7 @@ export default function Dashboard() {
 
                       {/* Unmapped Columns */}
                       {debugInfo.unmappedColumns && debugInfo.unmappedColumns.length > 0 && (
-                        <div>
+                        <div className="mb-3">
                           <div className="text-xs font-medium text-gray-600 mb-1.5">
                             Unmapped ({debugInfo.unmappedColumns.length})
                           </div>
@@ -396,6 +502,37 @@ export default function Dashboard() {
                           </div>
                         </div>
                       )}
+
+                      {/* Notion Integration Status */}
+                      <div className="border-t border-gray-100 pt-3 mt-3">
+                        <div className="text-xs font-medium text-gray-600 mb-1.5">
+                          Creative Assets (Notion)
+                        </div>
+                        {debugInfo.notionStatus === 'loading' && (
+                          <div className="flex items-center gap-2 text-xs text-gray-500">
+                            <div className="animate-spin h-3 w-3 border border-gray-400 border-t-transparent rounded-full"></div>
+                            Loading from Notion...
+                          </div>
+                        )}
+                        {debugInfo.notionStatus === 'success' && (
+                          <span className="text-xs text-green-600">
+                            {debugInfo.assetsLoaded} ads matched with creatives
+                          </span>
+                        )}
+                        {debugInfo.notionStatus === 'error' && (
+                          <span className="text-xs text-red-600" title={debugInfo.notionError}>
+                            Failed to load: {debugInfo.notionError}
+                          </span>
+                        )}
+                        {debugInfo.notionStatus === 'no-adid' && (
+                          <span className="text-xs text-gray-500">
+                            No Ad ID column found - creative join disabled
+                          </span>
+                        )}
+                        {!debugInfo.notionStatus && (
+                          <span className="text-xs text-gray-400">Not configured</span>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>

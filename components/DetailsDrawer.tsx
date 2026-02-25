@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useCallback } from 'react';
-import { AdData } from '@/types';
+import { useEffect, useCallback, useState } from 'react';
+import { AdData, NotionAsset } from '@/types';
 import {
   formatCurrency,
   formatROAS,
@@ -12,6 +12,21 @@ import {
   truncateUrl,
 } from '@/lib/formatters';
 
+type VideoStatus = 'ok' | 'thumbnail_only' | 'not_accessible' | 'post_based' | 'no_video';
+
+interface MetaCreative {
+  videoSource: string | null;
+  thumbnailUrl: string | null;
+  videoStatus: VideoStatus;
+  fallbackMessage: string | null;
+  body: string | null;
+  headline: string | null;
+  destinationUrl: string | null;
+  videoId: string | null;
+  extractionPath: 'a' | 'b' | 'c' | 'd' | null;
+  rawCreative: unknown;
+}
+
 interface DetailsDrawerProps {
   ad: AdData | null;
   isTopPerformer: boolean;
@@ -19,6 +34,30 @@ interface DetailsDrawerProps {
 }
 
 export default function DetailsDrawer({ ad, isTopPerformer, onClose }: DetailsDrawerProps) {
+  const [selectedAssetIndex, setSelectedAssetIndex] = useState(0);
+  const [metaCreative, setMetaCreative] = useState<MetaCreative | null>(null);
+  const [metaCreativeLoading, setMetaCreativeLoading] = useState(false);
+
+  // Reset and fetch Meta creative whenever the ad changes
+  useEffect(() => {
+    setSelectedAssetIndex(0);
+    setMetaCreative(null);
+
+    if (!ad?.adId) return;
+
+    setMetaCreativeLoading(true);
+    fetch(`/api/meta/creative?adId=${encodeURIComponent(ad.adId)}`)
+      .then((res) => (res.ok ? (res.json() as Promise<MetaCreative>) : null))
+      .catch(() => null)
+      .then((creative) => {
+        setMetaCreative(creative);
+        if (process.env.NODE_ENV === 'development' && creative?.rawCreative) {
+          console.log('[Meta creative] ad=%s status=%s', ad.adId, creative.videoStatus, creative.rawCreative);
+        }
+      })
+      .finally(() => setMetaCreativeLoading(false));
+  }, [ad?.adId]);
+
   // ESC key handler
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -44,8 +83,8 @@ export default function DetailsDrawer({ ad, isTopPerformer, onClose }: DetailsDr
 
   if (!ad) return null;
 
-  // Validate URLs
-  const destinationLinkResult = validateUrl(ad.destinationLink);
+  // Validate URLs — prefer Meta API data, fall back to CSV
+  const destinationLinkResult = validateUrl(metaCreative?.destinationUrl ?? ad.destinationLink);
   const previewLinkResult = validateUrl(ad.previewLink);
 
   return (
@@ -59,7 +98,7 @@ export default function DetailsDrawer({ ad, isTopPerformer, onClose }: DetailsDr
 
       {/* Drawer */}
       <aside
-        className="fixed right-0 top-0 h-full w-full sm:w-[400px] bg-white shadow-2xl z-40 overflow-y-auto"
+        className="fixed right-0 top-0 h-full w-full sm:w-[45vw] sm:min-w-[420px] bg-white shadow-2xl z-40 overflow-y-auto"
         role="dialog"
         aria-modal="true"
         aria-labelledby="drawer-title"
@@ -125,9 +164,18 @@ export default function DetailsDrawer({ ad, isTopPerformer, onClose }: DetailsDr
             </div>
           )}
 
+          {/* Creative Assets Section */}
+          <CreativeAssetsSection
+            assets={ad.assets}
+            selectedIndex={selectedAssetIndex}
+            onSelectAsset={setSelectedAssetIndex}
+            metaCreative={metaCreative}
+            isLoadingCreative={metaCreativeLoading}
+          />
+
           {/* Key Metrics Grid */}
           <section className="mb-8">
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">
+            <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-4">
               Key Metrics
             </h3>
             <div className="grid grid-cols-2 gap-3">
@@ -135,30 +183,31 @@ export default function DetailsDrawer({ ad, isTopPerformer, onClose }: DetailsDr
               <MetricCard label="Spend" value={formatCurrency(ad.spend)} />
               <MetricCard label="Purchases" value={formatInteger(ad.purchases)} />
               <MetricCard label="CPA" value={formatCurrency(ad.cpa)} />
-              <MetricCard
-                label="ROAS"
-                value={formatROAS(ad.roas)}
-                highlight={ad.roas !== null && ad.roas >= 3}
-                negative={ad.roas !== null && ad.roas < 1}
-              />
+              <MetricCard label="ROAS" value={formatROAS(ad.roas)} />
               <MetricCard label="Frequency" value={formatDecimal(ad.frequency)} />
+              {ad.campaignName && (
+                <MetricCard label="Campaign" value={ad.campaignName} />
+              )}
+              {ad.adId && (
+                <MetricCard label="Ad ID" value={ad.adId} />
+              )}
             </div>
           </section>
 
           {/* Creative Text Section */}
           <section className="mb-8">
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">
+            <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-4">
               Creative
             </h3>
             <div className="space-y-4">
-              <CreativeField label="Headline" value={ad.headline} />
-              <CreativeField label="Body" value={ad.body} multiline />
+              <CreativeField label="Headline" value={metaCreative?.headline ?? ad.headline} />
+              <CreativeField label="Body" value={metaCreative?.body ?? ad.body} multiline />
             </div>
           </section>
 
           {/* Links Section */}
           <section>
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">
+            <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-4">
               Links
             </h3>
             <div className="space-y-4">
@@ -193,11 +242,7 @@ export default function DetailsDrawer({ ad, isTopPerformer, onClose }: DetailsDr
 // Status Badge Component
 function StatusBadge({ status }: { status: string | null }) {
   if (!status) {
-    return (
-      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
-        Unknown
-      </span>
-    );
+    return null;
   }
 
   const normalizedStatus = status.toLowerCase();
@@ -243,27 +288,11 @@ function StatusBadge({ status }: { status: string | null }) {
 }
 
 // Metric Card Component
-function MetricCard({
-  label,
-  value,
-  highlight = false,
-  negative = false,
-}: {
-  label: string;
-  value: string;
-  highlight?: boolean;
-  negative?: boolean;
-}) {
+function MetricCard({ label, value }: { label: string; value: string }) {
   return (
     <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
       <dt className="text-xs font-medium text-gray-500 mb-1">{label}</dt>
-      <dd
-        className={`text-lg font-semibold font-mono ${
-          highlight ? 'text-green-600' : negative ? 'text-red-600' : 'text-gray-900'
-        }`}
-      >
-        {value}
-      </dd>
+      <dd className="text-sm font-normal text-gray-900 tabular-nums break-words">{value}</dd>
     </div>
   );
 }
@@ -417,3 +446,192 @@ function PreviewLinkField({
     </div>
   );
 }
+
+// ─── Creative Assets Section ───────────────────────────────────────────────
+// Rendering priority:
+//   1. Loading spinner
+//   2. Meta video source            (ok)
+//   3. Meta thumbnail / image       (thumbnailUrl present — video thumb, thumbnail_url, or image_url)
+//   4. Notion images                (no Meta visual)
+//   5. Empty state
+
+const isDev = process.env.NODE_ENV === 'development';
+
+function CreativeAssetsSection({
+  assets,
+  selectedIndex,
+  onSelectAsset,
+  metaCreative,
+  isLoadingCreative,
+}: {
+  assets: NotionAsset[];
+  selectedIndex: number;
+  onSelectAsset: (index: number) => void;
+  metaCreative: MetaCreative | null;
+  isLoadingCreative: boolean;
+}) {
+  const hasNotionAssets = assets && assets.length > 0;
+  const selectedAsset = hasNotionAssets
+    ? assets[Math.min(selectedIndex, assets.length - 1)]
+    : null;
+
+  const status = metaCreative?.videoStatus ?? null;
+
+  return (
+    <section className="mb-8">
+      <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-4">
+        Creative Assets
+      </h3>
+
+      {/* 1. Loading */}
+      {isLoadingCreative ? (
+        <div className="bg-gray-50 rounded-xl p-6 border border-gray-100 flex items-center justify-center gap-2 text-sm text-gray-400">
+          <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+          Loading creative…
+        </div>
+
+      ) : status === 'ok' ? (
+        /* 2. Streamable Meta video */
+        <div className="space-y-2">
+          <div className="bg-black rounded-xl overflow-hidden">
+            <video
+              src={metaCreative!.videoSource!}
+              poster={metaCreative!.thumbnailUrl ?? undefined}
+              controls
+              className="w-full max-h-[300px]"
+            />
+          </div>
+          <p className="text-xs text-gray-400">Video from Meta</p>
+          {isDev && metaCreative && (
+            <p className="text-xs text-gray-300 font-mono">
+              path={metaCreative.extractionPath} id={metaCreative.videoId}
+            </p>
+          )}
+        </div>
+
+      ) : metaCreative?.thumbnailUrl ? (
+        /* 3. Thumbnail / image from Meta (video thumb, thumbnail_url, or image_url) */
+        <div className="space-y-2">
+          <div className="relative bg-gray-100 rounded-xl overflow-hidden">
+            <img
+              src={metaCreative.thumbnailUrl}
+              alt="Creative"
+              className="w-full h-auto max-h-[360px] object-contain"
+              loading="lazy"
+            />
+            {/* Play icon overlay only for video-without-source */}
+            {status === 'thumbnail_only' && (
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="bg-black/50 rounded-full p-3">
+                  <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                </div>
+              </div>
+            )}
+          </div>
+          {metaCreative.fallbackMessage && (
+            <p className="text-xs text-gray-400">{metaCreative.fallbackMessage}</p>
+          )}
+          {isDev && (
+            <p className="text-xs text-gray-300 font-mono">
+              path={metaCreative.extractionPath} id={metaCreative.videoId}
+            </p>
+          )}
+        </div>
+
+      ) : hasNotionAssets ? (
+        /* 4. No Meta visual → Notion images */
+        <NotionGallery
+          assets={assets}
+          selectedIndex={selectedIndex}
+          onSelectAsset={onSelectAsset}
+          selectedAsset={selectedAsset}
+        />
+
+      ) : (
+        /* 6. Nothing */
+        <EmptyCreative />
+      )}
+    </section>
+  );
+}
+
+// Sub-component: Notion image gallery
+function NotionGallery({
+  assets,
+  selectedIndex,
+  onSelectAsset,
+  selectedAsset,
+}: {
+  assets: NotionAsset[];
+  selectedIndex: number;
+  onSelectAsset: (index: number) => void;
+  selectedAsset: NotionAsset | null;
+}) {
+  return (
+    <div className="space-y-3">
+      {selectedAsset && (
+        <div className="relative bg-gray-100 rounded-xl overflow-hidden">
+          <img
+            src={selectedAsset.url}
+            alt={selectedAsset.name}
+            className="w-full h-auto max-h-[300px] object-contain"
+            loading="lazy"
+          />
+          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-3">
+            <p className="text-xs text-white truncate" title={selectedAsset.name}>
+              {selectedAsset.name}
+            </p>
+          </div>
+          {selectedAsset.kind === 'external' && (
+            <div className="absolute top-2 right-2">
+              <span className="bg-black/50 text-white text-xs px-2 py-1 rounded">External</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {assets.length > 1 && (
+        <div className="flex gap-2 overflow-x-auto pb-2">
+          {assets.map((asset, index) => (
+            <button
+              key={index}
+              onClick={() => onSelectAsset(index)}
+              className={`flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-colors ${
+                index === selectedIndex ? 'border-blue-500' : 'border-transparent hover:border-gray-300'
+              }`}
+            >
+              <img src={asset.url} alt={asset.name} className="w-full h-full object-cover" loading="lazy" />
+            </button>
+          ))}
+        </div>
+      )}
+
+      <p className="text-xs text-gray-400">
+        {assets.length} {assets.length === 1 ? 'asset' : 'assets'} from Notion
+      </p>
+    </div>
+  );
+}
+
+// Sub-component: empty state
+function EmptyCreative() {
+  return (
+    <div className="bg-gray-50 rounded-xl p-6 border border-gray-100 text-center">
+      <svg className="w-10 h-10 mx-auto text-gray-300 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={1.5}
+          d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+        />
+      </svg>
+      <p className="text-sm text-gray-500">No creative available</p>
+    </div>
+  );
+}
+
