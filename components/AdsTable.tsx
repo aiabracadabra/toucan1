@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useRef, useEffect } from 'react';
+import { useMemo, useState, useRef, useEffect, type ReactNode } from 'react';
 import { AdData } from '@/types';
 import {
   formatCurrency,
@@ -15,6 +15,10 @@ interface AdsTableProps {
   topPerformerIds: Set<number>;
   onRowClick: (ad: AdData, index: number) => void;
   selectedIndex: number | null;
+  visibleCount?: number;
+  totalCount?: number;
+  isFiltered?: boolean;
+  headerRight?: ReactNode;
 }
 
 type ColumnKey =
@@ -53,6 +57,10 @@ export default function AdsTable({
   topPerformerIds,
   onRowClick,
   selectedIndex,
+  visibleCount,
+  totalCount,
+  isFiltered,
+  headerRight,
 }: AdsTableProps) {
   const [userVisible, setUserVisible] = useState<Set<ColumnKey>>(DEFAULT_VISIBLE);
   const [showPicker, setShowPicker] = useState(false);
@@ -106,74 +114,86 @@ export default function AdsTable({
     });
   };
 
-  if (data.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-64 text-gray-500">
-        <div className="text-center">
-          <svg
-            className="w-12 h-12 mx-auto mb-4 text-gray-300"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={1.5}
-              d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-            />
-          </svg>
-          <p className="text-lg font-medium">No ads to display</p>
-          <p className="text-sm mt-1">Upload a CSV or XLSX file to get started</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
-      {/* Columns toolbar */}
-      <div className="flex justify-end px-4 py-2 border-b border-gray-100 bg-white shrink-0">
-        <div className="relative" ref={pickerRef}>
-          <button
-            onClick={() => setShowPicker((v) => !v)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
-            </svg>
-            Columns
-          </button>
+      {/* Toolbar: count (left) + headerRight + Columns (right) */}
+      <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100 bg-white shrink-0 gap-2">
+        {totalCount !== undefined && totalCount > 0 ? (
+          <p className="text-sm text-gray-500">
+            Showing{' '}
+            <span className="font-medium text-gray-900">{visibleCount}</span>
+            {' '}of{' '}
+            <span className="font-medium text-gray-900">{totalCount}</span>
+            {' '}ads{isFiltered ? ' (filtered)' : ''}
+          </p>
+        ) : <div />}
 
-          {showPicker && (
-            <div className="absolute right-0 top-full mt-1 w-52 bg-white border border-gray-200 rounded-lg shadow-lg z-20 py-1">
-              {COLUMNS.map((col) => {
-                const available = hasData[col.key];
-                return (
-                  <label
-                    key={col.key}
-                    className={`flex items-center gap-2.5 px-3 py-1.5 cursor-pointer hover:bg-gray-50 ${
-                      !available ? 'opacity-40 cursor-not-allowed' : ''
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={userVisible.has(col.key)}
-                      disabled={!available}
-                      onChange={() => available && toggleColumn(col.key)}
-                      className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                    />
-                    <span className="text-sm text-gray-700">{col.label}</span>
-                  </label>
-                );
-              })}
+        <div className="flex items-center gap-2 shrink-0">
+          {headerRight}
+          {data.length > 0 && (
+            <div className="relative" ref={pickerRef}>
+              <button
+                onClick={() => setShowPicker((v) => !v)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+                </svg>
+                Columns
+              </button>
+
+              {showPicker && (
+                <div className="absolute right-0 top-full mt-1 w-52 bg-white border border-gray-200 rounded-lg shadow-lg z-20 py-1">
+                  {COLUMNS.map((col) => {
+                    const available = hasData[col.key];
+                    return (
+                      <label
+                        key={col.key}
+                        className={`flex items-center gap-2.5 px-3 py-1.5 cursor-pointer hover:bg-gray-50 ${
+                          !available ? 'opacity-40 cursor-not-allowed' : ''
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={userVisible.has(col.key)}
+                          disabled={!available}
+                          onChange={() => available && toggleColumn(col.key)}
+                          className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="text-sm text-gray-700">{col.label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
         </div>
       </div>
 
-      {/* Table */}
+      {/* Table or empty state */}
+      {data.length === 0 ? (
+        <div className="flex items-center justify-center h-64 text-gray-500">
+          <div className="text-center">
+            <svg
+              className="w-12 h-12 mx-auto mb-4 text-gray-300"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+              />
+            </svg>
+            <p className="text-lg font-medium">No ads to display</p>
+            <p className="text-sm mt-1">Upload a CSV or XLSX file, or sync from Meta</p>
+          </div>
+        </div>
+      ) : (
       <div className="overflow-auto flex-1">
         <table className="w-full border-collapse">
           <thead className="sticky top-0 z-10">
@@ -266,6 +286,7 @@ export default function AdsTable({
           </tbody>
         </table>
       </div>
+      )}
     </div>
   );
 }

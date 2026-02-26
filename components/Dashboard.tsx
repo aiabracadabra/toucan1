@@ -39,10 +39,13 @@ export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncDateRange, setSyncDateRange] = useState('last_30d');
+  const [syncCustomSince, setSyncCustomSince] = useState('');
+  const [syncCustomUntil, setSyncCustomUntil] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [debugInfo, setDebugInfo] = useState<ParseDebugInfo | null>(null);
   const [showDebug, setShowDebug] = useState(false);
   const debugRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Close debug popover when clicking outside
   useEffect(() => {
@@ -303,7 +306,14 @@ export default function Dashboard() {
     setError(null);
 
     try {
-      const res = await fetch(`/api/meta/insights?preset=${syncDateRange}`);
+      let url: string;
+      if (syncDateRange === 'custom' && syncCustomSince && syncCustomUntil) {
+        url = `/api/meta/insights?since=${syncCustomSince}&until=${syncCustomUntil}`;
+      } else {
+        url = `/api/meta/insights?preset=${syncDateRange}`;
+      }
+
+      const res = await fetch(url);
       const json = await res.json();
 
       if (!res.ok) {
@@ -327,32 +337,205 @@ export default function Dashboard() {
     } finally {
       setIsSyncing(false);
     }
-  }, [syncDateRange]);
+  }, [syncDateRange, syncCustomSince, syncCustomUntil]);
 
   const hasWarnings = debugInfo?.warnings && debugInfo.warnings.length > 0;
+  const isFiltered = !!(filters.search || filters.activeOnly || filters.minSpend !== null);
+
+  // Icons rendered inside AdsTable's toolbar via headerRight prop
+  const tableHeaderRight = (
+    <div className="flex items-center gap-1">
+      {/* Upload CSV icon button */}
+      <button
+        onClick={() => fileInputRef.current?.click()}
+        className="p-1.5 rounded text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+        title="Upload CSV / XLSX"
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+        </svg>
+      </button>
+
+      {/* Export CSV icon button */}
+      {rawData.length > 0 && (
+        <button
+          onClick={handleExport}
+          className="p-1.5 rounded text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+          title="Export CSV"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+          </svg>
+        </button>
+      )}
+
+      {/* Debug info button */}
+      {debugInfo && (
+        <div className="relative" ref={debugRef}>
+          <button
+            onClick={() => setShowDebug(!showDebug)}
+            className={`p-1.5 rounded-full transition-colors ${
+              showDebug
+                ? 'bg-gray-200 text-gray-700'
+                : hasWarnings
+                ? 'text-amber-500 hover:bg-amber-50'
+                : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'
+            }`}
+            title="Parsing details"
+          >
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <path
+                fillRule="evenodd"
+                d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                clipRule="evenodd"
+              />
+            </svg>
+          </button>
+
+          {showDebug && (
+            <div className="absolute right-0 top-full mt-2 w-80 sm:w-96 bg-white border border-gray-200 rounded-lg shadow-lg z-20 p-4 text-sm">
+              <h4 className="font-medium text-gray-900 mb-3">Parsing Details</h4>
+
+              {/* Warnings */}
+              {hasWarnings && (
+                <div className="mb-3">
+                  <div className="flex items-center gap-1.5 text-amber-700 mb-1.5">
+                    <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                      <path
+                        fillRule="evenodd"
+                        d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                    <span className="text-xs font-medium">Warnings</span>
+                  </div>
+                  <ul className="text-xs text-amber-800 space-y-0.5 pl-5">
+                    {debugInfo.warnings?.map((warning, i) => (
+                      <li key={i}>{warning}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Mapped Columns */}
+              {debugInfo.mappedColumns && Object.keys(debugInfo.mappedColumns).length > 0 && (
+                <div className="mb-3">
+                  <div className="text-xs font-medium text-gray-600 mb-1.5">
+                    Mapped ({Object.keys(debugInfo.mappedColumns).length})
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {Object.entries(debugInfo.mappedColumns).map(([field, column]) => (
+                      <span
+                        key={field}
+                        className="bg-green-50 text-green-700 px-1.5 py-0.5 rounded text-xs"
+                        title={`${field} ← ${column}`}
+                      >
+                        {field}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Unmapped Columns */}
+              {debugInfo.unmappedColumns && debugInfo.unmappedColumns.length > 0 && (
+                <div className="mb-3">
+                  <div className="text-xs font-medium text-gray-600 mb-1.5">
+                    Unmapped ({debugInfo.unmappedColumns.length})
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {debugInfo.unmappedColumns.slice(0, 8).map((col) => (
+                      <span
+                        key={col}
+                        className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded text-xs"
+                      >
+                        {col}
+                      </span>
+                    ))}
+                    {debugInfo.unmappedColumns.length > 8 && (
+                      <span className="text-xs text-gray-400">
+                        +{debugInfo.unmappedColumns.length - 8} more
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Notion Integration Status */}
+              <div className="border-t border-gray-100 pt-3 mt-3">
+                <div className="text-xs font-medium text-gray-600 mb-1.5">
+                  Creative Assets (Notion)
+                </div>
+                {debugInfo.notionStatus === 'loading' && (
+                  <div className="flex items-center gap-2 text-xs text-gray-500">
+                    <div className="animate-spin h-3 w-3 border border-gray-400 border-t-transparent rounded-full"></div>
+                    Loading from Notion...
+                  </div>
+                )}
+                {debugInfo.notionStatus === 'success' && (
+                  <span className="text-xs text-green-600">
+                    {debugInfo.assetsLoaded} ads matched with creatives
+                  </span>
+                )}
+                {debugInfo.notionStatus === 'error' && (
+                  <span className="text-xs text-red-600" title={debugInfo.notionError}>
+                    Failed to load: {debugInfo.notionError}
+                  </span>
+                )}
+                {debugInfo.notionStatus === 'no-adid' && (
+                  <span className="text-xs text-gray-500">
+                    No Ad ID column found - creative join disabled
+                  </span>
+                )}
+                {!debugInfo.notionStatus && (
+                  <span className="text-xs text-gray-400">Not configured</span>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
       {/* Header */}
       <header className="bg-white border-b border-gray-200 px-6 py-4">
-        <h1 className="text-xl font-bold text-gray-900">Meta Ads Dashboard Viewer</h1>
+        <h1 className="text-xl font-bold text-gray-900">Meta Ads Dashboard</h1>
         <p className="text-sm text-gray-500 mt-1">
-          Upload your exported Meta Ads report to analyze performance
+          Sync and analyze your Meta campaigns in one place.
         </p>
       </header>
+
+      {/* Hidden file input — triggered by upload icon in AdsTable toolbar */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".csv,.xlsx,.xls"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) handleFileUpload(file);
+          if (fileInputRef.current) fileInputRef.current.value = '';
+        }}
+        className="hidden"
+      />
 
       {/* Top Bar with filters */}
       <TopBar
         filters={filters}
         onFiltersChange={setFilters}
-        onFileUpload={handleFileUpload}
         onMetaSync={handleMetaSync}
         isSyncing={isSyncing}
         syncDateRange={syncDateRange}
         onSyncDateRangeChange={setSyncDateRange}
+        syncCustomSince={syncCustomSince}
+        syncCustomUntil={syncCustomUntil}
+        onSyncCustomSinceChange={setSyncCustomSince}
+        onSyncCustomUntilChange={setSyncCustomUntil}
         onReset={handleReset}
-        onExport={handleExport}
-        hasData={processedData.length > 0}
       />
 
       {/* Main content */}
@@ -398,149 +581,6 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Stats bar with info icon */}
-        {!isLoading && rawData.length > 0 && (
-          <div className="bg-white border-b border-gray-200 px-4 py-2">
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-gray-500">
-                Showing <span className="font-medium text-gray-900">{processedData.length}</span> of{' '}
-                <span className="font-medium text-gray-900">{rawData.length}</span> ads
-                {filters.search || filters.activeOnly || filters.minSpend !== null
-                  ? ' (filtered)'
-                  : ''}
-              </p>
-
-              {/* Info icon for parsing details */}
-              {debugInfo && (
-                <div className="relative" ref={debugRef}>
-                  <button
-                    onClick={() => setShowDebug(!showDebug)}
-                    className={`p-1.5 rounded-full transition-colors ${
-                      showDebug
-                        ? 'bg-gray-200 text-gray-700'
-                        : hasWarnings
-                        ? 'text-amber-500 hover:bg-amber-50'
-                        : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'
-                    }`}
-                    title="Parsing details"
-                  >
-                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                      <path
-                        fillRule="evenodd"
-                        d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
-                  </button>
-
-                  {/* Debug popover */}
-                  {showDebug && (
-                    <div className="absolute right-0 top-full mt-2 w-80 sm:w-96 bg-white border border-gray-200 rounded-lg shadow-lg z-20 p-4 text-sm">
-                      <h4 className="font-medium text-gray-900 mb-3">Parsing Details</h4>
-
-                      {/* Warnings */}
-                      {hasWarnings && (
-                        <div className="mb-3">
-                          <div className="flex items-center gap-1.5 text-amber-700 mb-1.5">
-                            <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                              <path
-                                fillRule="evenodd"
-                                d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
-                                clipRule="evenodd"
-                              />
-                            </svg>
-                            <span className="text-xs font-medium">Warnings</span>
-                          </div>
-                          <ul className="text-xs text-amber-800 space-y-0.5 pl-5">
-                            {debugInfo.warnings?.map((warning, i) => (
-                              <li key={i}>{warning}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-
-                      {/* Mapped Columns */}
-                      {debugInfo.mappedColumns && Object.keys(debugInfo.mappedColumns).length > 0 && (
-                        <div className="mb-3">
-                          <div className="text-xs font-medium text-gray-600 mb-1.5">
-                            Mapped ({Object.keys(debugInfo.mappedColumns).length})
-                          </div>
-                          <div className="flex flex-wrap gap-1">
-                            {Object.entries(debugInfo.mappedColumns).map(([field, column]) => (
-                              <span
-                                key={field}
-                                className="bg-green-50 text-green-700 px-1.5 py-0.5 rounded text-xs"
-                                title={`${field} ← ${column}`}
-                              >
-                                {field}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Unmapped Columns */}
-                      {debugInfo.unmappedColumns && debugInfo.unmappedColumns.length > 0 && (
-                        <div className="mb-3">
-                          <div className="text-xs font-medium text-gray-600 mb-1.5">
-                            Unmapped ({debugInfo.unmappedColumns.length})
-                          </div>
-                          <div className="flex flex-wrap gap-1">
-                            {debugInfo.unmappedColumns.slice(0, 8).map((col) => (
-                              <span
-                                key={col}
-                                className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded text-xs"
-                              >
-                                {col}
-                              </span>
-                            ))}
-                            {debugInfo.unmappedColumns.length > 8 && (
-                              <span className="text-xs text-gray-400">
-                                +{debugInfo.unmappedColumns.length - 8} more
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Notion Integration Status */}
-                      <div className="border-t border-gray-100 pt-3 mt-3">
-                        <div className="text-xs font-medium text-gray-600 mb-1.5">
-                          Creative Assets (Notion)
-                        </div>
-                        {debugInfo.notionStatus === 'loading' && (
-                          <div className="flex items-center gap-2 text-xs text-gray-500">
-                            <div className="animate-spin h-3 w-3 border border-gray-400 border-t-transparent rounded-full"></div>
-                            Loading from Notion...
-                          </div>
-                        )}
-                        {debugInfo.notionStatus === 'success' && (
-                          <span className="text-xs text-green-600">
-                            {debugInfo.assetsLoaded} ads matched with creatives
-                          </span>
-                        )}
-                        {debugInfo.notionStatus === 'error' && (
-                          <span className="text-xs text-red-600" title={debugInfo.notionError}>
-                            Failed to load: {debugInfo.notionError}
-                          </span>
-                        )}
-                        {debugInfo.notionStatus === 'no-adid' && (
-                          <span className="text-xs text-gray-500">
-                            No Ad ID column found - creative join disabled
-                          </span>
-                        )}
-                        {!debugInfo.notionStatus && (
-                          <span className="text-xs text-gray-400">Not configured</span>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
         {/* Table */}
         {!isLoading && !error && (
           <AdsTable
@@ -548,6 +588,10 @@ export default function Dashboard() {
             topPerformerIds={topPerformerIds}
             onRowClick={handleRowClick}
             selectedIndex={selectedAd?.index ?? null}
+            visibleCount={processedData.length}
+            totalCount={rawData.length}
+            isFiltered={isFiltered}
+            headerRight={tableHeaderRight}
           />
         )}
       </main>
